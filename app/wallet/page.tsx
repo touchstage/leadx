@@ -1,0 +1,437 @@
+"use client"
+
+import { useState, useEffect } from "react"
+import { AppSidebar } from "@/components/app-sidebar"
+import { SiteHeader } from "@/components/site-header"
+import {
+  SidebarInset,
+  SidebarProvider,
+} from "@/components/ui/sidebar"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Badge } from "@/components/ui/badge"
+import { Plus, Minus, DollarSign, TrendingUp, ArrowUpRight, ArrowDownRight, Clock, Loader2 } from "lucide-react"
+
+// Mock data
+const mockTransactions = [
+  {
+    id: "1",
+    type: "purchase",
+    amount: -150,
+    description: "Fintech companies in UAE looking for CRM solutions",
+    date: "2024-01-18",
+    status: "completed"
+  },
+  {
+    id: "2",
+    type: "sale",
+    amount: 140,
+    description: "Healthcare tech partnerships and integrations",
+    date: "2024-01-19",
+    status: "completed"
+  },
+  {
+    id: "3",
+    type: "deposit",
+    amount: 500,
+    description: "Wallet top-up",
+    date: "2024-01-15",
+    status: "completed"
+  },
+  {
+    id: "4",
+    type: "purchase",
+    amount: -200,
+    description: "B2B SaaS companies hiring VP Sales in Europe",
+    date: "2024-01-16",
+    status: "completed"
+  },
+  {
+    id: "5",
+    type: "withdrawal",
+    amount: -100,
+    description: "Cash out to bank account",
+    date: "2024-01-20",
+    status: "pending"
+  }
+]
+
+export default function WalletPage() {
+  const [addAmount, setAddAmount] = useState("")
+  const [cashoutAmount, setCashoutAmount] = useState("")
+  const [isLoading, setIsLoading] = useState(false)
+  const [walletData, setWalletData] = useState<{
+    currentBalance: number
+    totalEarnings: number
+    totalSpent: number
+    transactions: any[]
+  } | null>(null)
+  const [isLoadingData, setIsLoadingData] = useState(true)
+
+  // Fetch wallet data
+  useEffect(() => {
+    const fetchWalletData = async () => {
+      try {
+        const response = await fetch('/api/user/wallet')
+        if (response.ok) {
+          const data = await response.json()
+          setWalletData(data)
+        } else {
+          console.error('Failed to fetch wallet data')
+        }
+      } catch (error) {
+        console.error('Error fetching wallet data:', error)
+      } finally {
+        setIsLoadingData(false)
+      }
+    }
+
+    fetchWalletData()
+  }, [])
+
+  const handleAddFunds = async () => {
+    if (!addAmount || parseFloat(addAmount) < 1) {
+      alert("Please enter a valid amount (minimum ₹1)")
+      return
+    }
+
+    setIsLoading(true)
+    try {
+      const response = await fetch('/api/payments/create-order', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          amount: parseFloat(addAmount),
+          description: 'LeadX Credits Purchase'
+        })
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to create payment order')
+      }
+
+      const { orderId, amount, currency, key } = await response.json()
+
+      // Load Razorpay script dynamically
+      const script = document.createElement('script')
+      script.src = 'https://checkout.razorpay.com/v1/checkout.js'
+      script.onload = () => {
+        const options = {
+          key: key,
+          amount: amount,
+          currency: currency,
+          name: 'LeadX',
+          description: 'LeadX Credits Purchase',
+          order_id: orderId,
+          handler: function (response: any) {
+            alert('Payment successful! Credits will be added to your account shortly.')
+            setAddAmount("")
+            // Refresh page or update balance
+            window.location.reload()
+          },
+          prefill: {
+            name: 'User Name',
+            email: 'user@example.com',
+          },
+          theme: {
+            color: '#111827'
+          }
+        }
+
+        const rzp = new (window as any).Razorpay(options)
+        rzp.open()
+      }
+      document.body.appendChild(script)
+
+    } catch (error) {
+      console.error('Payment error:', error)
+      alert('Payment failed. Please try again.')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleCashout = async () => {
+    if (!cashoutAmount || parseFloat(cashoutAmount) < 1) {
+      alert("Please enter a valid amount (minimum ₹1)")
+      return
+    }
+
+    if (parseFloat(cashoutAmount) > (walletData?.currentBalance || 0)) {
+      alert("Insufficient balance")
+      return
+    }
+
+    setIsLoading(true)
+    try {
+      const response = await fetch('/api/wallet/cashout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          credits: parseFloat(cashoutAmount)
+        })
+      })
+
+      if (response.ok) {
+        alert('Cashout request submitted successfully!')
+        setCashoutAmount("")
+        window.location.reload()
+      } else {
+        throw new Error('Cashout failed')
+      }
+    } catch (error) {
+      console.error('Cashout error:', error)
+      alert('Cashout failed. Please try again.')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  if (isLoadingData) {
+    return (
+      <SidebarProvider
+        style={
+          {
+            "--sidebar-width": "calc(var(--spacing) * 72)",
+            "--header-height": "calc(var(--spacing) * 12)",
+          } as React.CSSProperties
+        }
+      >
+        <AppSidebar variant="inset" />
+        <SidebarInset>
+          <SiteHeader />
+          <div className="flex flex-1 flex-col">
+            <div className="@container/main flex flex-1 flex-col gap-2">
+              <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6">
+                <div className="px-4 lg:px-6">
+                  <div className="mb-8">
+                    <h1 className="text-4xl font-bold text-stone-900">Wallet</h1>
+                    <p className="text-lg text-stone-600 mt-2">Manage your balance and track transactions</p>
+                  </div>
+                </div>
+                <div className="px-4 lg:px-6">
+                  <div className="text-center py-12">
+                    <Loader2 className="w-8 h-8 mx-auto mb-4 text-stone-400 animate-spin" />
+                    <p className="text-stone-500">Loading your wallet...</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </SidebarInset>
+      </SidebarProvider>
+    )
+  }
+
+  return (
+    <SidebarProvider
+      style={
+        {
+          "--sidebar-width": "calc(var(--spacing) * 72)",
+          "--header-height": "calc(var(--spacing) * 12)",
+        } as React.CSSProperties
+      }
+    >
+      <AppSidebar variant="inset" />
+      <SidebarInset>
+        <SiteHeader />
+        <div className="flex flex-1 flex-col">
+          <div className="@container/main flex flex-1 flex-col gap-2">
+            <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6">
+              {/* Header */}
+              <div className="px-4 lg:px-6">
+                <div className="max-w-4xl mx-auto">
+                  <div className="mb-8">
+                    <h1 className="text-4xl font-bold text-stone-900">Wallet</h1>
+                    <p className="text-lg text-stone-600 mt-2">Manage your balance and track transactions</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Balance Overview */}
+              <div className="px-4 lg:px-6">
+                <div className="max-w-4xl mx-auto">
+                  <div className="grid gap-6 md:grid-cols-3">
+                  <Card className="rounded-2xl border-2 border-stone-200 bg-white shadow-lg">
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                      <CardTitle className="text-sm font-medium text-stone-600">Current Balance</CardTitle>
+                      <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center">
+                        <DollarSign className="h-4 w-4 text-blue-600" />
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-3xl font-bold text-stone-900">${walletData?.currentBalance || 0}</div>
+                      <p className="text-sm text-stone-500 mt-1">Available credits</p>
+                    </CardContent>
+                  </Card>
+                  <Card className="rounded-2xl border-2 border-stone-200 bg-white shadow-lg">
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                      <CardTitle className="text-sm font-medium text-stone-600">Total Earnings</CardTitle>
+                      <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center">
+                        <TrendingUp className="h-4 w-4 text-green-600" />
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-3xl font-bold text-green-600">${walletData?.totalEarnings || 0}</div>
+                      <p className="text-sm text-stone-500 mt-1">From intel sales</p>
+                    </CardContent>
+                  </Card>
+                  <Card className="rounded-2xl border-2 border-stone-200 bg-white shadow-lg">
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                      <CardTitle className="text-sm font-medium text-stone-600">Total Spent</CardTitle>
+                      <div className="w-8 h-8 rounded-full bg-red-100 flex items-center justify-center">
+                        <Minus className="h-4 w-4 text-red-600" />
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-3xl font-bold text-red-600">${walletData?.totalSpent || 0}</div>
+                      <p className="text-sm text-stone-500 mt-1">On intel purchases</p>
+                    </CardContent>
+                  </Card>
+                </div>
+              </div>
+
+              {/* Quick Actions */}
+              <div className="px-4 lg:px-6">
+                <div className="max-w-4xl mx-auto">
+                  <Card className="rounded-2xl border-2 border-stone-200 bg-white shadow-lg">
+                  <CardHeader>
+                    <CardTitle className="text-xl font-semibold text-stone-900">Quick Actions</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid gap-6 md:grid-cols-2">
+                      <div className="space-y-4">
+                        <div>
+                          <Label htmlFor="add-amount" className="text-base font-medium text-stone-700">Add Funds (₹)</Label>
+                          <Input
+                            id="add-amount"
+                            type="number"
+                            placeholder="100"
+                            value={addAmount}
+                            onChange={(e) => setAddAmount(e.target.value)}
+                            className="mt-2 rounded-xl h-12 border-stone-200 focus:border-stone-400 focus:ring-0"
+                          />
+                        </div>
+                        <Button 
+                          onClick={handleAddFunds}
+                          disabled={isLoading}
+                          className="w-full rounded-xl bg-stone-900 hover:bg-stone-800 text-white font-medium h-12"
+                        >
+                          {isLoading ? (
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          ) : (
+                            <Plus className="h-4 w-4 mr-2" />
+                          )}
+                          {isLoading ? 'Processing...' : 'Add Funds'}
+                        </Button>
+                      </div>
+                      <div className="space-y-4">
+                        <div>
+                          <Label htmlFor="cashout-amount" className="text-base font-medium text-stone-700">Amount to Cash Out (₹)</Label>
+                          <Input
+                            id="cashout-amount"
+                            type="number"
+                            placeholder="100"
+                            value={cashoutAmount}
+                            onChange={(e) => setCashoutAmount(e.target.value)}
+                            className="mt-2 rounded-xl h-12 border-stone-200 focus:border-stone-400 focus:ring-0"
+                          />
+                        </div>
+                        <Button 
+                          onClick={handleCashout}
+                          disabled={isLoading}
+                          variant="outline" 
+                          className="w-full rounded-xl border-2 border-stone-300 hover:border-stone-400 h-12"
+                        >
+                          {isLoading ? (
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          ) : (
+                            <ArrowDownRight className="h-4 w-4 mr-2" />
+                          )}
+                          {isLoading ? 'Processing...' : 'Cash Out'}
+                        </Button>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+                </div>
+              </div>
+
+              {/* Transaction History */}
+              <div className="px-4 lg:px-6">
+                <div className="max-w-4xl mx-auto">
+                  <Card className="rounded-2xl border-2 border-stone-200 bg-white shadow-lg">
+                  <CardHeader>
+                    <CardTitle className="text-xl font-semibold text-stone-900">Recent Transactions</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      {walletData?.transactions && walletData.transactions.length > 0 ? (
+                        walletData.transactions.map((transaction) => (
+                        <div key={transaction.id} className="flex items-center justify-between p-6 border border-stone-200 rounded-xl hover:bg-stone-50/50 transition-colors">
+                          <div className="flex items-center gap-4">
+                            <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
+                              transaction.type === 'sale' || transaction.type === 'deposit' 
+                                ? 'bg-green-100' 
+                                : 'bg-red-100'
+                            }`}>
+                              {transaction.type === 'sale' || transaction.type === 'deposit' ? (
+                                <ArrowUpRight className="h-5 w-5 text-green-600" />
+                              ) : (
+                                <ArrowDownRight className="h-5 w-5 text-red-600" />
+                              )}
+                            </div>
+                            <div>
+                              <p className="font-semibold text-stone-900">{transaction.description}</p>
+                              <div className="flex items-center gap-2 mt-1">
+                                <p className="text-sm text-stone-500">{transaction.date}</p>
+                                {transaction.status === 'pending' && (
+                                  <div className="flex items-center gap-1">
+                                    <Clock className="h-3 w-3 text-orange-500" />
+                                    <span className="text-xs text-orange-600">Pending</span>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <p className={`text-lg font-bold ${
+                              transaction.amount > 0 ? 'text-green-600' : 'text-red-600'
+                            }`}>
+                              {transaction.amount > 0 ? '+' : ''}${Math.abs(transaction.amount)}
+                            </p>
+                            <Badge 
+                              variant={transaction.status === 'completed' ? 'default' : 'secondary'}
+                              className={`rounded-full px-3 py-1 text-sm font-medium ${
+                                transaction.status === 'completed' 
+                                  ? 'bg-green-100 text-green-700' 
+                                  : 'bg-orange-100 text-orange-700'
+                              }`}
+                            >
+                              {transaction.status}
+                            </Badge>
+                          </div>
+                        </div>
+                        ))
+                      ) : (
+                        <div className="text-center py-12">
+                          <DollarSign className="w-12 h-12 mx-auto mb-4 text-stone-300" />
+                          <p className="text-stone-500">No transactions found</p>
+                          <p className="text-sm text-stone-400 mt-1">Your transaction history will appear here</p>
+                        </div>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+                </div>
+              </div>
+            </div>
+            </div>
+          </div>
+        </div>
+      </SidebarInset>
+    </SidebarProvider>
+  )
+}

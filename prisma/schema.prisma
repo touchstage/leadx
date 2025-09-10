@@ -1,0 +1,260 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id               String             @id @default(cuid())
+  clerkId          String?            @unique // Clerk user ID
+  email            String             @unique
+  name             String?
+  image            String?
+  password         String?            // For custom authentication (legacy)
+  company          String?
+  role             String?
+  reputationScore  Float              @default(0)
+  creditsBalance   Int                @default(0)
+  kycVerified      Boolean            @default(false)
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  intels           Intel[]            @relation("UserIntels")
+  demands          Demand[]           @relation("UserDemands")
+  transactionsB    Transaction[]      @relation("BuyerTransactions")
+  transactionsS    Transaction[]      @relation("SellerTransactions")
+  ratingsGiven     Rating[]           @relation("RatingsByBuyer")
+  ratingsReceived  Rating[]           @relation("RatingsForSeller")
+  ledger           CreditsLedger[]
+  fulfillments     DemandFulfillment[]
+  intelRequestsMade IntelRequest[]    @relation("IntelRequestRequester")
+  intelRequestsReceived IntelRequest[] @relation("IntelRequestSeller")
+  intelUpdatesSent IntelUpdate[]      @relation("IntelUpdateSeller")
+  intelUpdatesReceived IntelUpdate[]  @relation("IntelUpdateBuyer")
+  conversations    Conversation[]     @relation("ConversationParticipants")
+  messagesSent     Message[]          @relation("MessageSender")
+}
+
+enum IntelStatus {
+  DRAFT
+  PUBLISHED
+  LOCKED
+  SOLD
+  DISPUTED
+}
+
+model Intel {
+  id           String      @id @default(cuid())
+  title        String
+  description  String
+  category     String
+  priceCredits Int
+  status       IntelStatus @default(PUBLISHED)
+  sellerId     String
+  seller       User        @relation("UserIntels", fields: [sellerId], references: [id])
+  attachments  Json?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  transactions Transaction[]
+  ratings      Rating[]
+  embedding    Embedding?  @relation("IntelEmbedding")
+  requests     IntelRequest[]
+  updates      IntelUpdate[]
+  conversations Conversation[]
+}
+
+enum DemandStatus {
+  OPEN
+  FULFILLED
+  DISPUTED
+  CLOSED
+  CANCELLED
+}
+
+model Demand {
+  id               String       @id @default(cuid())
+  title            String
+  description      String
+  bountyCredits    Int
+  deadline         Int?         // Days from creation
+  category         String?
+  additionalDetails String?
+  status           DemandStatus @default(OPEN)
+  buyerId          String
+  buyer            User         @relation("UserDemands", fields: [buyerId], references: [id])
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  fulfillments     DemandFulfillment[]
+  transactions     Transaction[]
+  embedding        Embedding?   @relation("DemandEmbedding")
+  ratings          Rating[]
+}
+
+enum FulfillmentStatus {
+  SUBMITTED
+  ACCEPTED
+  REJECTED
+  DISPUTED
+}
+
+model DemandFulfillment {
+  id          String            @id @default(cuid())
+  demandId    String
+  demand      Demand            @relation(fields: [demandId], references: [id])
+  sellerId    String
+  seller      User              @relation(fields: [sellerId], references: [id])
+  content     String
+  attachments Json?
+  status      FulfillmentStatus @default(SUBMITTED)
+  createdAt   DateTime          @default(now())
+}
+
+enum TransactionStatus {
+  ESCROW
+  RELEASED
+  REFUNDED
+  DISPUTED
+}
+
+model Transaction {
+  id            String            @id @default(cuid())
+  buyerId       String
+  buyer         User              @relation("BuyerTransactions", fields: [buyerId], references: [id])
+  sellerId      String
+  seller        User              @relation("SellerTransactions", fields: [sellerId], references: [id])
+  intelId       String?
+  intel         Intel?            @relation(fields: [intelId], references: [id])
+  demandId      String?
+  demand        Demand?           @relation(fields: [demandId], references: [id])
+  creditsSpent  Int
+  platformFee   Int
+  status        TransactionStatus @default(ESCROW)
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  updates       IntelUpdate[]
+  conversations Conversation[]
+}
+
+model Rating {
+  id        String  @id @default(cuid())
+  buyerId   String
+  buyer     User    @relation("RatingsByBuyer", fields: [buyerId], references: [id])
+  sellerId  String
+  seller    User    @relation("RatingsForSeller", fields: [sellerId], references: [id])
+  intelId   String?
+  intel     Intel?  @relation(fields: [intelId], references: [id])
+  demandId  String?
+  demand    Demand? @relation(fields: [demandId], references: [id])
+  stars     Int
+  comment   String?
+  createdAt DateTime @default(now())
+}
+
+enum LedgerType {
+  EARN
+  SPEND
+  CASHOUT
+  PURCHASE
+  FEE
+  REFUND
+}
+
+model CreditsLedger {
+  id            String     @id @default(cuid())
+  userId        String
+  user          User       @relation(fields: [userId], references: [id])
+  type          LedgerType
+  amount        Int
+  balanceAfter  Int
+  referenceId   String?
+  createdAt     DateTime   @default(now())
+}
+
+model Embedding {
+  id         String   @id @default(cuid())
+  intelId    String?  @unique
+  intel      Intel?   @relation("IntelEmbedding", fields: [intelId], references: [id])
+  demandId   String?  @unique
+  demand     Demand?  @relation("DemandEmbedding", fields: [demandId], references: [id])
+  vector     Json
+  metadata   Json?
+  createdAt  DateTime @default(now())
+}
+
+enum IntelRequestStatus {
+  PENDING
+  RESPONDED
+  CLOSED
+}
+
+model IntelRequest {
+  id          String             @id @default(cuid())
+  intelId     String
+  intel       Intel              @relation(fields: [intelId], references: [id])
+  requesterId String
+  requester   User               @relation("IntelRequestRequester", fields: [requesterId], references: [id])
+  sellerId    String
+  seller      User               @relation("IntelRequestSeller", fields: [sellerId], references: [id])
+  message     String
+  bountyCredits Int
+  deadline    DateTime?
+  status      IntelRequestStatus @default(PENDING)
+  response    String?
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+}
+
+model IntelUpdate {
+  id            String   @id @default(cuid())
+  transactionId String
+  transaction   Transaction @relation(fields: [transactionId], references: [id])
+  intelId       String
+  intel         Intel    @relation(fields: [intelId], references: [id])
+  sellerId      String
+  seller        User     @relation("IntelUpdateSeller", fields: [sellerId], references: [id])
+  buyerId       String
+  buyer         User     @relation("IntelUpdateBuyer", fields: [buyerId], references: [id])
+  title         String
+  content       String
+  attachments   Json?
+  isRead        Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model Conversation {
+  id            String   @id @default(cuid())
+  transactionId String
+  transaction   Transaction @relation(fields: [transactionId], references: [id])
+  intelId       String
+  intel         Intel    @relation(fields: [intelId], references: [id])
+  participants  User[]   @relation("ConversationParticipants")
+  messages      Message[]
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model Message {
+  id             String       @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id])
+  senderId       String
+  sender         User         @relation("MessageSender", fields: [senderId], references: [id])
+  content        String
+  attachments    Json?
+  isRead         Boolean      @default(false)
+  createdAt      DateTime     @default(now())
+}
