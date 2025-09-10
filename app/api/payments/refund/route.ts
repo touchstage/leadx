@@ -10,6 +10,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    if (!razorpay) {
+      return NextResponse.json(
+        { error: "Payment service not configured" },
+        { status: 500 }
+      );
+    }
+
     // Find user by Clerk ID
     const user = await prisma.user.findUnique({
       where: { clerkId: userId }

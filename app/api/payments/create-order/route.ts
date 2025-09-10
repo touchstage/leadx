@@ -9,6 +9,13 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "unauthorized" }, { status: 401 });
     }
 
+    if (!razorpay) {
+      return NextResponse.json(
+        { error: "Payment service not configured" },
+        { status: 500 }
+      );
+    }
+
     const { amount, currency = 'INR', description = 'LeadX Credits' } = await req.json();
 
     if (!amount || amount < 1) {
